@@ -3831,10 +3831,10 @@ rb_warp_affine(int argc, VALUE *argv, VALUE self)
 VALUE
 rb_estimate_affine_3d(int argc, VALUE *argv, VALUE self)
 {
+  printf("START\n");
   VALUE src_points, dst_points, ransac_threshold, confidence;
-  rb_scan_args(argc, argv, "23", 
+  rb_scan_args(argc, argv, "22", 
       &src_points, &dst_points, &ransac_threshold, &confidence);
-
   CvMat *src = CVMAT_WITH_CHECK(src_points);
   int num_points = MAX(src->rows, src->cols);
   VALUE affine = new_object(cvSize(3, 4), CV_32FC1);
@@ -3843,14 +3843,19 @@ rb_estimate_affine_3d(int argc, VALUE *argv, VALUE self)
   double _confidence = NIL_P(confidence) ? 0.99 : NUM2DBL(confidence);
   int result_code = 0;
 
+  cv::Mat mat_src(CVMAT(src_points), true);
+  cv::Mat mat_dst(CVMAT(dst_points), true);
+  cv::Mat mat_affine;
+  cv::Mat mat_inliers;
+
   try {
     // This function is C++, so the regular C style interfaces require casting
     // in order for the code to compile
     result_code = cv::estimateAffine3D(
-        (cv::InputArray) *CVMAT(src_points),
-        (cv::InputArray) *CVMAT(dst_points),
-        (cv::OutputArray) *CVMAT(affine),
-        (cv::OutputArray) *CVMAT(inliers),
+        mat_src,
+        mat_dst,
+        mat_affine,
+        mat_inliers,
         _ransac_threshold,
         _confidence
         );
@@ -3860,8 +3865,8 @@ rb_estimate_affine_3d(int argc, VALUE *argv, VALUE self)
   }
 
   VALUE result = rb_ary_new();
-  rb_ary_push(result, affine);
-  rb_ary_push(result, inliers);
+  // rb_ary_push(result, affine);
+  // rb_ary_push(result, inliers);
   rb_ary_push(result, INT2NUM(result_code));
   return result;
 }
