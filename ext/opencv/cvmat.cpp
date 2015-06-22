@@ -3746,7 +3746,7 @@ rb_quadrangle_sub_pix(int argc, VALUE *argv, VALUE self)
 
 /*
  * Resizes an image.
- *
+ *Output vector indicating which points are inliers.
  * @overload resize(size, interpolation = :linear)
  * @param size [CvSize] Output image size.
  * @param interpolation [Symbol] Interpolation method:
@@ -3806,6 +3806,64 @@ rb_warp_affine(int argc, VALUE *argv, VALUE self)
     raise_cverror(e);
   }
   return dest;
+}
+
+/*
+ * Finds a perspective transformation between two planes.
+ *
+ * @overload estimate_affine_3d(src_points, dst_points, ransac_threshold = 3, confidence = 0.99)
+ *   @param src_points [CvMat] Coordinates of the points in the original plane.
+ *   @param dst_points [CvMat] Coordinates of the points in the target plane.
+ *   @param ransac_threshold [Number] Maximum allowed reprojection error to treat a point pair as
+ *     an inlier (used in the RANSAC method only).
+ *   @param confidence [Number] Confidence level, between 0 and 1, for the
+ *     estimated transformation. Anything between 0.95 and 0.99 is usually good
+ *     enough. Values too close to 1 can slow down the estimation significantly.
+ *     Values lower than 0.8-0.9 can result in an incorrectly estimated
+ *     transformation.
+ * @return [CvMat, CvMat, int] The array contains `out` and `inliers`. `out` is the 
+ *     3D affine transformation matrix 3 x 4, `inliers` is an output vector 
+ *     indicating which points are inliers. The last value is the return value
+ *     of the OpenCV function call.
+ * @scope class
+ * @opencv_func cv::estimateAffine3D
+ */
+VALUE
+rb_estimate_affine_3d(int argc, VALUE *argv, VALUE self)
+{
+  VALUE src_points, dst_points, ransac_threshold, confidence;
+  rb_scan_args(argc, argv, "23", 
+      &src_points, &dst_points, &ransac_threshold, &confidence);
+
+  CvMat *src = CVMAT_WITH_CHECK(src_points);
+  int num_points = MAX(src->rows, src->cols);
+  VALUE affine = new_object(cvSize(3, 4), CV_32FC1);
+  VALUE inliers = new_object(cvSize(3, num_points), CV_32FC1);
+  double _ransac_threshold = NIL_P(ransac_threshold) ? 3.0 : NUM2DBL(ransac_threshold);
+  double _confidence = NIL_P(confidence) ? 0.99 : NUM2DBL(confidence);
+  int result_code = 0;
+
+  try {
+    // This function is C++, so the regular C style interfaces require casting
+    // in order for the code to compile
+    result_code = cv::estimateAffine3D(
+        (cv::InputArray) *CVMAT(src_points),
+        (cv::InputArray) *CVMAT(dst_points),
+        (cv::OutputArray) *CVMAT(affine),
+        (cv::OutputArray) *CVMAT(inliers),
+        _ransac_threshold,
+        _confidence
+        );
+  }
+  catch (cv::Exception& e) {
+    raise_cverror(e);
+  }
+
+  VALUE result = rb_ary_new();
+  rb_ary_push(result, affine);
+  rb_ary_push(result, inliers);
+  rb_ary_push(result, INT2NUM(result_code));
+  return result;
 }
 
 /*
@@ -6012,6 +6070,7 @@ init_ruby_class()
   rb_define_singleton_method(rb_klass, "get_perspective_transform", RUBY_METHOD_FUNC(rb_get_perspective_transform), 2);
   rb_define_method(rb_klass, "warp_perspective", RUBY_METHOD_FUNC(rb_warp_perspective), -1);
   rb_define_singleton_method(rb_klass, "find_homography", RUBY_METHOD_FUNC(rb_find_homography), -1);
+  rb_define_singleton_method(rb_klass, "estimate_affine_3d", RUBY_METHOD_FUNC(rb_estimate_affine_3d), -1);
   rb_define_method(rb_klass, "remap", RUBY_METHOD_FUNC(rb_remap), -1);
   rb_define_method(rb_klass, "log_polar", RUBY_METHOD_FUNC(rb_log_polar), -1);
 
